@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -q oci
+      - run: pip install -q -r requirements.txt
       - id: launch
         run: python launch.py
       # only when this run created the VM: wait for it, then open an issue (GitHub emails the owner)
@@ -50,6 +50,6 @@ jobs:
         run: |
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "VM creata: $IP" \
-            --body "La VM Ampere A1 è stata creata. Indirizzo per Minecraft: \`$IP\` (porta 25565). Risposta del server: $PING"
+            --body "La VM Ampere A1 Ã¨ stata creata. Indirizzo per Minecraft: \`$IP\` (porta 25565). Risposta del server: $PING"
           # the job is done: stop the schedule
           gh workflow disable "Oracle A1 launch retry" --repo "$GITHUB_REPOSITORY" || true
