@@ -7,7 +7,7 @@ import time
 
 import oci
 
-config = {k: os.environ[v] for k, v in
+config = {k: os.environ[v].strip() + ("\n" if k == "key_content" else "") for k, v in
           {"user": "OCI_USER", "tenancy": "OCI_TENANCY", "fingerprint": "OCI_FINGERPRINT", "region": "OCI_REGION", "key_content": "OCI_KEY"}.items()}
 compute = oci.core.ComputeClient(config)
 network = oci.core.VirtualNetworkClient(config)

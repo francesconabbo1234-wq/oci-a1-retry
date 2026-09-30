@@ -31,10 +31,10 @@ def output(**kv):
 
 
 config = {
-    "user": os.environ["OCI_USER"],
-    "tenancy": os.environ["OCI_TENANCY"],
-    "fingerprint": os.environ["OCI_FINGERPRINT"],
-    "region": os.environ["OCI_REGION"],
+    "user": os.environ["OCI_USER"].strip(),
+    "tenancy": os.environ["OCI_TENANCY"].strip(),
+    "fingerprint": os.environ["OCI_FINGERPRINT"].strip(),
+    "region": os.environ["OCI_REGION"].strip(),
     "key_content": os.environ["OCI_KEY"],
 }
 oci.config.validate_config(config)
@@ -63,9 +63,9 @@ exec > /var/log/minecraft-bootstrap.log 2>&1
 set -x
 cd /home/ubuntu
 fetch() {{ for i in $(seq 1 20); do python3 -c "import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" "$1" "$2" && return 0; sleep 30; done; return 1; }}
-fetch '{os.environ["PAR_SETUP"]}' setup-server.sh
-fetch '{os.environ["PAR_BACKUP"]}' mc-backup.sh
-fetch '{os.environ["PAR_ARCHIVE"]}' aeronautics-server.tar.gz
+fetch '{os.environ["PAR_SETUP"].strip()}' setup-server.sh
+fetch '{os.environ["PAR_BACKUP"].strip()}' mc-backup.sh
+fetch '{os.environ["PAR_ARCHIVE"].strip()}' aeronautics-server.tar.gz
 chown ubuntu:ubuntu setup-server.sh mc-backup.sh aeronautics-server.tar.gz
 sudo -u ubuntu -H bash /home/ubuntu/setup-server.sh
 echo BOOTSTRAP-DONE
@@ -80,7 +80,7 @@ details = oci.core.models.LaunchInstanceDetails(
     source_details=oci.core.models.InstanceSourceViaImageDetails(image_id=image.id, boot_volume_size_in_gbs=50),
     create_vnic_details=oci.core.models.CreateVnicDetails(subnet_id=subnet, assign_public_ip=True),
     metadata={
-        "ssh_authorized_keys": os.environ["SSH_PUBLIC_KEY"],
+        "ssh_authorized_keys": os.environ["SSH_PUBLIC_KEY"].strip(),
         "user_data": base64.b64encode(user_data.encode()).decode(),
     },
 )
