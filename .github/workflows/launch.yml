@@ -1,0 +1,55 @@
+name: Oracle A1 launch retry
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub may delay or skip runs under load)
+  workflow_dispatch: {}
+
+# one run at a time: a slow run must not overlap the next one
+concurrency:
+  group: a1-launch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OCI_USER: ${{ secrets.OCI_USER }}
+      OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_REGION: ${{ secrets.OCI_REGION }}
+      OCI_KEY: ${{ secrets.OCI_KEY }}
+      SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      PAR_ARCHIVE: ${{ secrets.PAR_ARCHIVE }}
+      PAR_SETUP: ${{ secrets.PAR_SETUP }}
+      PAR_BACKUP: ${{ secrets.PAR_BACKUP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -q oci
+      - id: launch
+        run: python launch.py
+      # only when this run created the VM: wait for it, then open an issue (GitHub emails the owner)
+      - id: ready
+        if: steps.launch.outputs.result == 'created'
+        run: python wait_ready.py "${{ steps.launch.outputs.instance_id }}"
+      - if: steps.launch.outputs.result == 'created'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IP: ${{ steps.ready.outputs.ip }}
+          PING: ${{ steps.ready.outputs.ping }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "VM creata: $IP" \
+            --body "La VM Ampere A1 è stata creata. Indirizzo per Minecraft: \`$IP\` (porta 25565). Risposta del server: $PING"
+          # the job is done: stop the schedule
+          gh workflow disable "Oracle A1 launch retry" --repo "$GITHUB_REPOSITORY" || true
