@@ -1,11 +1,13 @@
 name: Oracle A1 launch retry
 
+# GitHub's cron fires only a few times a day here, so each run retries for ~5.5 hours and then
+# starts the next run itself (workflow_dispatch); the cron only restarts the chain if it ever breaks
 on:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes (GitHub may delay or skip runs under load)
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
-# one run at a time: a slow run must not overlap the next one
+# one run at a time: a queued run starts when the current one ends
 concurrency:
   group: a1-launch
   cancel-in-progress: false
@@ -18,7 +20,7 @@ permissions:
 jobs:
   launch:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 350
     env:
       OCI_USER: ${{ secrets.OCI_USER }}
       OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
@@ -37,12 +39,25 @@ jobs:
           cache: pip
       - run: pip install -q -r requirements.txt
       - id: launch
+        env:
+          LOOP_MINUTES: "${{ github.event_name == 'schedule' && '25' || '330' }}"
+          INTERVAL: "60"
         run: python launch.py
-      # only when this run created the VM: wait for it, then open an issue (GitHub emails the owner)
+      # no VM yet: queue the next long run (a dispatch made with GITHUB_TOKEN does start a new run)
+      - if: steps.launch.outputs.result == 'capacity' || steps.launch.outputs.result == 'throttled'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(gh run list --repo "$GITHUB_REPOSITORY" --event workflow_dispatch --status in_progress --json databaseId --jq length)" != "0" ]; then
+            echo "a long run is already going"
+          else
+            gh workflow run launch.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
+          fi
+      # the VM is there (created now, or by an earlier run that stopped before the notice): wait for it, then open an issue (GitHub emails the owner)
       - id: ready
-        if: steps.launch.outputs.result == 'created'
+        if: steps.launch.outputs.result == 'created' || steps.launch.outputs.result == 'exists'
         run: python wait_ready.py "${{ steps.launch.outputs.instance_id }}"
-      - if: steps.launch.outputs.result == 'created'
+      - if: steps.launch.outputs.result == 'created' || steps.launch.outputs.result == 'exists'
         env:
           GH_TOKEN: ${{ github.token }}
           IP: ${{ steps.ready.outputs.ip }}

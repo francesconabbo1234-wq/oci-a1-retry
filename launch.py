@@ -1,17 +1,20 @@
-"""One attempt to create the Always Free Ampere A1 VM on Oracle Cloud (run every 5 minutes by GitHub Actions).
+"""Tries to create the Always Free Ampere A1 VM on Oracle Cloud (run by GitHub Actions, see LOOP_MINUTES).
 
 Everything account-specific comes from environment variables (repository secrets):
   OCI_USER, OCI_TENANCY, OCI_FINGERPRINT, OCI_REGION, OCI_KEY (API private key, PEM text)
   SSH_PUBLIC_KEY                          public key allowed to log in as "ubuntu"
   PAR_ARCHIVE, PAR_SETUP, PAR_BACKUP      pre-authenticated download links of the server files (Object Storage)
-Optional: INSTANCE_NAME (default "minecraft"), SUBNET_NAME (default "public-subnet"), OCPUS (1), MEMORY_GB (6).
+Optional: INSTANCE_NAME (default "minecraft"), SUBNET_NAME (default "public-subnet"), OCPUS (1), MEMORY_GB (6),
+LOOP_MINUTES (keep retrying for this long, default 0 = one attempt), INTERVAL (seconds between attempts, default 60).
 
 Exit codes: 0 = created, already there, or no capacity (normal, retried later); 1 = unexpected error.
 Writes "result=created|exists|capacity|throttled" and "instance_id=..." to $GITHUB_OUTPUT when set.
 """
 import base64
 import os
+import random
 import sys
+import time
 
 import oci
 
@@ -19,6 +22,8 @@ NAME = os.environ.get("INSTANCE_NAME", "minecraft")
 SUBNET_NAME = os.environ.get("SUBNET_NAME", "public-subnet")
 OCPUS = float(os.environ.get("OCPUS", "1"))
 MEMORY_GB = float(os.environ.get("MEMORY_GB", "6"))
+LOOP_MINUTES = float(os.environ.get("LOOP_MINUTES", "0"))  # 0 = a single attempt
+INTERVAL = int(os.environ.get("INTERVAL", "60"))
 
 
 def output(**kv):
@@ -84,20 +89,30 @@ details = oci.core.models.LaunchInstanceDetails(
         "user_data": base64.b64encode(user_data.encode()).decode(),
     },
 )
-try:
-    inst = compute.launch_instance(details).data
-except oci.exceptions.ServiceError as e:
-    text = f"{e.status} {e.code} {e.message}"
-    if e.status == 429:
-        print("throttled:", text)
-        output(result="throttled")
+# GitHub's cron fires only a few times a day on this repo, so each run keeps trying for LOOP_MINUTES
+# (one attempt every INTERVAL seconds, longer pauses after a 429); the workflow then starts the next run itself
+deadline = time.time() + LOOP_MINUTES * 60
+attempts = 0
+while True:
+    attempts += 1
+    try:
+        inst = compute.launch_instance(details, retry_strategy=oci.retry.NO_RETRY_STRATEGY).data
+        break
+    except oci.exceptions.ServiceError as e:
+        text = f"{e.status} {e.code} {e.message}"
+        if e.status == 429:
+            result, pause = "throttled", random.randint(300, 900)
+        elif "capacity" in text.lower():
+            result, pause = "capacity", INTERVAL
+        else:
+            print(f"[{time.strftime('%H:%M:%S')}] attempt {attempts}: unexpected error: {text}")
+            sys.exit(1)
+        print(f"[{time.strftime('%H:%M:%S')}] attempt {attempts}: {result}: {text}", flush=True)
+    if time.time() + pause > deadline:
+        print(f"{attempts} attempts, no VM yet")
+        output(result=result, attempts=attempts)
         sys.exit(0)
-    if "capacity" in text.lower():
-        print("no capacity:", text)
-        output(result="capacity")
-        sys.exit(0)
-    print("unexpected error:", text)
-    sys.exit(1)
+    time.sleep(pause)
 
-print(f"CREATED {inst.id} ({OCPUS:g} OCPU / {MEMORY_GB:g} GB, image {image.display_name})")
-output(result="created", instance_id=inst.id)
+print(f"CREATED {inst.id} ({OCPUS:g} OCPU / {MEMORY_GB:g} GB, image {image.display_name}) after {attempts} attempts")
+output(result="created", instance_id=inst.id, attempts=attempts)
