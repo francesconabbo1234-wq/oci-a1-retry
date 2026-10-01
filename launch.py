@@ -96,7 +96,7 @@ attempts = 0
 while True:
     attempts += 1
     try:
-        inst = compute.launch_instance(details, retry_strategy=oci.retry.NO_RETRY_STRATEGY).data
+        inst = compute.launch_instance(details, retry_strategy=oci.retry.NoneRetryStrategy()).data
         break
     except oci.exceptions.ServiceError as e:
         text = f"{e.status} {e.code} {e.message}"
