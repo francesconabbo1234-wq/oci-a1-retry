@@ -5,7 +5,11 @@ name: Oracle A1 launch retry
 on:
   schedule:
     - cron: "*/30 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How long this run keeps retrying (the runs it starts use 330)"
+        default: "330"
 
 # one run at a time: a queued run starts when the current one ends
 concurrency:
@@ -40,7 +44,7 @@ jobs:
       - run: pip install -q -r requirements.txt
       - id: launch
         env:
-          LOOP_MINUTES: "${{ github.event_name == 'schedule' && '25' || '330' }}"
+          LOOP_MINUTES: "${{ github.event_name == 'schedule' && '25' || inputs.minutes || '330' }}"
           INTERVAL: "60"
         run: python launch.py
       # no VM yet: queue the next long run (a dispatch made with GITHUB_TOKEN does start a new run)
