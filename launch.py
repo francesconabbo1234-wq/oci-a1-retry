@@ -56,6 +56,9 @@ for inst in compute.list_instances(compartment_id=tenancy, display_name=NAME).da
         sys.exit(0)
 
 ad = identity.list_availability_domains(compartment_id=tenancy).data[0].name
+# a single AD, but three fault domains (separate groups of hosts): with no fault domain Oracle picks one, so each attempt
+# asks a specific one in turn, where free A1 hosts may be left
+fault_domains = [f.name for f in identity.list_fault_domains(compartment_id=tenancy, availability_domain=ad).data] or [None]
 subnet = network.list_subnets(compartment_id=tenancy, display_name=SUBNET_NAME).data[0].id
 images = compute.list_images(compartment_id=tenancy, operating_system="Canonical Ubuntu",
                              operating_system_version="24.04 Minimal aarch64", shape="VM.Standard.A1.Flex",
@@ -95,6 +98,7 @@ deadline = time.time() + LOOP_MINUTES * 60
 attempts = 0
 while True:
     attempts += 1
+    details.fault_domain = fault_domains[(attempts - 1) % len(fault_domains)]
     try:
         inst = compute.launch_instance(details, retry_strategy=oci.retry.NoneRetryStrategy()).data
         break
@@ -107,12 +111,12 @@ while True:
         else:
             print(f"[{time.strftime('%H:%M:%S')}] attempt {attempts}: unexpected error: {text}")
             sys.exit(1)
-        print(f"[{time.strftime('%H:%M:%S')}] attempt {attempts}: {result}: {text}", flush=True)
+        print(f"[{time.strftime('%H:%M:%S')}] attempt {attempts} ({details.fault_domain}): {result}: {text}", flush=True)
     if time.time() + pause > deadline:
         print(f"{attempts} attempts, no VM yet")
         output(result=result, attempts=attempts)
         sys.exit(0)
     time.sleep(pause)
 
-print(f"CREATED {inst.id} ({OCPUS:g} OCPU / {MEMORY_GB:g} GB, image {image.display_name}) after {attempts} attempts")
+print(f"CREATED {inst.id} ({OCPUS:g} OCPU / {MEMORY_GB:g} GB, {details.fault_domain}, image {image.display_name}) after {attempts} attempts")
 output(result="created", instance_id=inst.id, attempts=attempts)
