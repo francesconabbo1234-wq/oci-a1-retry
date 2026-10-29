@@ -1,10 +1,10 @@
-"""Tries to create the Always Free Ampere A1 VM on Oracle Cloud (run by GitHub Actions, see LOOP_MINUTES).
+﻿"""Tries to create the Always Free Ampere A1 VM on Oracle Cloud (run by GitHub Actions, see LOOP_MINUTES).
 
 Everything account-specific comes from environment variables (repository secrets):
   OCI_USER, OCI_TENANCY, OCI_FINGERPRINT, OCI_REGION, OCI_KEY (API private key, PEM text)
   SSH_PUBLIC_KEY                          public key allowed to log in as "ubuntu"
   PAR_ARCHIVE, PAR_SETUP, PAR_BACKUP      pre-authenticated download links of the server files (Object Storage)
-Optional: INSTANCE_NAME (default "minecraft"), SUBNET_NAME (default "public-subnet"), OCPUS (1), MEMORY_GB (6),
+Optional: INSTANCE_NAME (default "minecraft"), SUBNET_NAME (default "public-subnet"), OCPUS (2), MEMORY_GB (12),
 LOOP_MINUTES (keep retrying for this long, default 0 = one attempt), INTERVAL (seconds between attempts, default 60).
 
 Exit codes: 0 = created, already there, or no capacity (normal, retried later); 1 = unexpected error.
@@ -20,8 +20,8 @@ import oci
 
 NAME = os.environ.get("INSTANCE_NAME", "minecraft")
 SUBNET_NAME = os.environ.get("SUBNET_NAME", "public-subnet")
-OCPUS = float(os.environ.get("OCPUS", "1"))
-MEMORY_GB = float(os.environ.get("MEMORY_GB", "6"))
+OCPUS = float(os.environ.get("OCPUS", "2"))
+MEMORY_GB = float(os.environ.get("MEMORY_GB", "12"))
 LOOP_MINUTES = float(os.environ.get("LOOP_MINUTES", "0"))  # 0 = a single attempt
 INTERVAL = int(os.environ.get("INTERVAL", "60"))
 
